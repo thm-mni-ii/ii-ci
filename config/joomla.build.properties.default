@@ -1,0 +1,18 @@
+#Joomla Login Daten
+export ci_joomla_user="admin"
+export ci_joomla_password="joomlamnici"
+export ci_joomla_lang="en-GB"
+export ci_joomla_mail="joomlaci@joomlaci.com"
+
+#Joomla Datenbank Daten
+export ci_jdb_password="joomla-test-pass--"
+export ci_jdb_prefix="cimni_"
+
+#Joomla Version
+export ci_joomla_version="3.10.4"
+
+#Name der Joomla! Archiv-Datei
+export ci_joomla_zip="joomlaci.zip"
+
+#Name des SQL-Dumps, befindet sich in der Archiv-Datei
+export ci_sqldump="jommladump.sql"
