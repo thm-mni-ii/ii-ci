@@ -5,7 +5,7 @@
 #exit-codes:
 # 0	Alles OK
 # 1 	Buildvariablen konnten nicht geladen werden
-# 2	kritischer Linter fehlgeschlagen
+# 2	Datenbankmodus konnte nicht gesetzt werden
 # 3	Datenbak konnte nicht erstellt werden
 # 4	Datenbakbenutzer konnte nicht erstellt werden
 # 5	Datenbakrechte konnten nicht gesetzt werden
@@ -15,6 +15,7 @@
 # 9	Admin-Benutzer konnte nicht in die Usergroup-Map eingetragen werden.
 # 10	Datenbankdump konnte nicht erstellt werden.
 # 11	Datenbank und Datenbankbenutzer konnten nicht gelöscht werden.
+# 12	Joomla konnte nicht heruntergeladen werden
 
 mysqlopts='-u root -proot'
 
@@ -38,6 +39,22 @@ fi
 echo "OK! Buildvariablen wurden eingelesen."
 
 echo "Joomla! auspacken, DB erstellen, Admin anlegen, Config anpassen..."
+if [ "${ci_joomla_version}" == "latest" ]; then
+	echo "Zu verwendende Joomla-Version wird bestimmt..."
+	ci_joomla_version=$(curl --silent "https://downloads.joomla.org/api/v1/latest/cms" | jq -r .branches[${ci_joomla_branch}].version)
+	echo "Es wird die Version ${ci_joomla_version} von Joomla-Version verwendet."
+fi
+if [ ! -x "build/jpackages/Joomla_${ci_joomla_version}-Stable-Full_Package.zip" ]; then
+	echo "Version liegt nicht lokal vor und wird heruntergeladen..."
+	ci_joomla_version_url=$(echo ${ci_joomla_version} | tr '.' '-')
+	wget -qO "build/jpackages/Joomla_${ci_joomla_version}-Stable-Full_Package.zip" "https://downloads.joomla.org/cms/joomla${ci_joomla_branch}/$(echo ${ci_joomla_version_url})/Joomla_${ci_joomla_version_url}-Stable-Full_Package.zip"
+	if [ $? -eq "0" ]; then
+		echo "Joomla wurde erfolgreich heruntergeladen."
+	else
+		echo "FAIL! Joomla konnte nicht heruntergeladen werden."
+		exit 12
+	fi
+fi
 echo "Joomla-Version ${ci_joomla_version} wird installiert..."
 unzip -u build/jpackages/*${ci_joomla_version}*.zip -d ./ > /dev/null && echo "OK! Joomla Archiv entpackt."
 ci_jdb_name=$(php build/scripts/php/joomla-prepare.php --dbname)
@@ -83,11 +100,19 @@ else
 fi
 
 echo "Präfix im Datenbankdump ersetzten..."
-sed -i "s/#__/${ci_jdb_prefix}/" installation/sql/mysql/joomla.sql
+if [ "${ci_joomla_branch}" -ge "4" ]; then
+	sed -i "s/#__/${ci_jdb_prefix}/" installation/sql/mysql/base.sql
+else
+	sed -i "s/#__/${ci_jdb_prefix}/" installation/sql/mysql/joomla.sql
+fi
 echo "OK! Präfix in Datenbank ersetzt."
 
 echo "Dump wir in Datenbank eingespielt..."
-mysql -u "${ci_jdb_user}" -p"${ci_jdb_password}" -h "localhost" -P 3306 "${ci_jdb_name}" < installation/sql/mysql/joomla.sql
+if [ "${ci_joomla_branch}" -ge "4" ]; then
+	mysql -u "${ci_jdb_user}" -p"${ci_jdb_password}" -h "localhost" -P 3306 "${ci_jdb_name}" < installation/sql/mysql/base.sql
+else
+	mysql -u "${ci_jdb_user}" -p"${ci_jdb_password}" -h "localhost" -P 3306 "${ci_jdb_name}" < installation/sql/mysql/joomla.sql
+fi
 if [ $? -eq "0" ]; then
 	echo "OK! Dump in Datenbank eingespielt."
 else
@@ -96,7 +121,7 @@ else
 fi
 
 echo "Joomla Konfigurationsdatei wird erstellt..."
-php build/scripts/php/joomla-prepare.php --config --db_host="localhost" --db_user="${ci_jdb_user}" --db_pass="${ci_jdb_password}" --db_name="${ci_jdb_name}" --db_prefix="${ci_jdb_prefix}"
+php build/scripts/php/joomla-prepare.php --config --db_host="localhost" --db_user="${ci_jdb_user}" --db_pass="${ci_jdb_password}" --db_name="${ci_jdb_name}" --db_prefix="${ci_jdb_prefix}" || exit 7
 if [ $? -eq "0" ]; then
 	echo "OK! Joomla Konfigurationsdatei erstellt."
 else
@@ -196,7 +221,7 @@ php build/scripts/php/ext-sort.php --extxmlfile=${ci_file_ext_install} || exit 1
 echo "OK! Erweiterungen wurden sortiert."
 
 echo "Beginn der Installation aller Erweiterungen..."
-php build/scripts/php/ext-install.php --user "${ci_joomla_user}" --password "${ci_joomla_password}"
+php build/scripts/php/ext-install.php --user "${ci_joomla_user}" --password "${ci_joomla_password}" || exit 16
 if [ -e "build/temp/extinstalltempfile" ]; then
 	echo "FAIL! Eine der Erweiterungen konnte nicht installiert werden."
 	exit 16
@@ -205,7 +230,7 @@ else
 fi
 
 echo "Beginn der Deinstallation aller Erweiterungen..."
-php build/scripts/php/ext-uninstall.php --user "${ci_joomla_user}" --password "${ci_joomla_password}"
+php build/scripts/php/ext-uninstall.php --user "${ci_joomla_user}" --password "${ci_joomla_password}" || exit 17
 if [ -e "build/temp/extuninstalltempfile" ]; then
 	echo "FAIL! Eine der Erweiterungen konnte nicht deinstalliert werden."
 	exit 17
@@ -214,7 +239,7 @@ else
 fi
 
 echo "Beginn der erneuten Installation aller Erweiterungen..."
-php build/scripts/php/ext-install.php --user "${ci_joomla_user}" --password "${ci_joomla_password}"
+php build/scripts/php/ext-install.php --user "${ci_joomla_user}" --password "${ci_joomla_password}" || exit 18
 if [ -e "build/temp/extinstalltempfile" ]; then
 	echo "FAIL! Eine der Erweiterungen konnte nicht erneut installiert werden."
 	exit 18
