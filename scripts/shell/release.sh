@@ -13,9 +13,20 @@ IFS='/' read -ra REPO <<< "$GITHUB_REPOSITORY"
 REPO_USER="${REPO[0]}"
 REPO_NAME="${REPO[1]}"
 
+echo "Buildvariablen werden eingelesen..."
+. build/config/joomla.build.properties.default || exit 1
+if [ -x joomla.build.properties ]; then
+	echo "Projektspezifische Buildvariablen werden eingelesen..."
+	. joomla.build.properties || exit 1
+	echo "OK! Projektspezifische Buildvariablen wurden eingelesen!"
+else
+	echo "Es wurden keine projektspezifischen Buildvariablen gefunden."
+fi
+echo "OK! Buildvariablen wurden eingelesen."
+
 echo "Creating \"${REPO_NAME}\" release..."
 cd extensions/${REPO_NAME}/${REPO_NAME}
-sed -i "s/<\/server>/https:\/\/${REPO_USER}.github.io\/${REPO_NAME}\/updates.xml<\/server>/" ${REPO_NAME}.xml
+sed -i "s/<\/server>/https:\/\/thm-mni-ii.github.io\/${REPO_NAME}\/updates.xml<\/server>/" ${REPO_NAME}.xml
 zip -r ../../../release/${REPO_NAME} *
 cd ${pwdbak}
 echo "${REPO_NAME} release succesfully created."
